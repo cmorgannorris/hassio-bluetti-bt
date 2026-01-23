@@ -61,45 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config,
         lock,
     )
-
-    # Try initial data fetch with retries for faster boot-time sensor availability
-    max_initial_attempts = 5
-    initial_retry_delay = 5  # seconds between retries
-    for attempt in range(1, max_initial_attempts + 1):
-        try:
-            logger.info(
-                "Initial data fetch attempt %d/%d for %s",
-                attempt,
-                max_initial_attempts,
-                mac_loggable(config.address),
-            )
-            await coordinator.async_config_entry_first_refresh()
-            logger.info("Initial data fetch successful for %s", mac_loggable(config.address))
-            break  # Success, exit retry loop
-        except Exception as err:
-            # Device still not ready or connection failed
-            if attempt < max_initial_attempts:
-                logger.warning(
-                    "Initial data fetch failed for %s, retrying in %ds (attempt %d/%d): %s",
-                    mac_loggable(config.address),
-                    initial_retry_delay,
-                    attempt,
-                    max_initial_attempts,
-                    err,
-                )
-                await asyncio.sleep(initial_retry_delay)
-            else:
-                # All retries exhausted, give up and let normal polling handle it
-                logger.warning(
-                    "Initial data fetch failed after %d attempts for %s, "
-                    "will retry via normal polling schedule: %s",
-                    max_initial_attempts,
-                    mac_loggable(config.address),
-                    err,
-                )
-                # Don't raise - let the integration load anyway
-                # Entities will become available once polling succeeds
-
+    await coordinator.async_config_entry_first_refresh()
     hass.data[DOMAIN][entry.entry_id].setdefault(DATA_COORDINATOR, coordinator)
     hass.data[DOMAIN][entry.entry_id].setdefault(DATA_LOCK, lock)
 

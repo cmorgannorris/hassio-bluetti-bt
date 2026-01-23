@@ -225,16 +225,17 @@ class BluettiSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _set_unavailable(self, cause: str = "Unknown"):
-        """Set sensor as unavailable."""
+        """Mark sensor data as stale but keep showing last value."""
         self._unavailable_counter += 1
 
         self._attr_extra_state_attributes = {
             "unavailable_counter": self._unavailable_counter,
             "unavailable_cause": cause,
+            "data_stale": True,
         }
 
-        if self._unavailable_counter >= 5:
-            self._attr_available = False
+        # Don't mark as unavailable - retain last known value
+        # Entity will show last value with stale indicator in attributes
 
         self.async_write_ha_state()
 
