@@ -202,6 +202,7 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
             if (
                 hasattr(self.coordinator, 'reader') and
                 self.coordinator.reader.client is not None and
+                self.coordinator.reader.client.is_connected and
                 self.coordinator.reader.encryption is not None and
                 self.coordinator.reader.encryption.is_ready_for_commands
             ):
