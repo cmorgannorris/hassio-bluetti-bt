@@ -5,3 +5,4 @@
 .venv/
 *.log
 *.egg-info/
+device_writer_*.py

@@ -1,2 +1,2 @@
 homeassistant
-bluetti-bt-lib==0.1.6
+bluetti-bt-lib @ git+https://github.com/cmorgannorris/bluetti-bt-lib.git@main

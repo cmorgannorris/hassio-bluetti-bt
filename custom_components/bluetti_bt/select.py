@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
 
-from bluetti_bt_lib import build_device, BluettiDevice, DeviceWriter, FieldName
+from bluetti_bt_lib import build_device, BluettiDevice, DeviceWriter, DeviceWriterConfig, FieldName
 from bluetti_bt_lib.fields import SelectField
 
 from .types import FullDeviceConfig, get_category
@@ -38,10 +38,6 @@ async def async_setup_entry(
     logger = logging.getLogger(
         f"{__name__}.{mac_loggable(config.address).replace(':', '_')}"
     )
-
-    if config.use_encryption is True:
-        logger.info("Controls are disabled on encrypted devices")
-        return None
 
     if config is None or not isinstance(coordinator, PollingCoordinator):
         logger.error("No coordinator found")
@@ -67,6 +63,7 @@ async def async_setup_entry(
                 device_info,
                 field,
                 lock,
+                use_encryption=config.use_encryption,
                 category=category,
                 logger=logger,
             )
@@ -86,6 +83,7 @@ class BluettiSelect(CoordinatorEntity, SelectEntity):
         device_info: DeviceInfo,
         field: SelectField,
         lock: asyncio.Lock,
+        use_encryption: bool = False,
         category: EntityCategory | None = None,
         logger: logging.Logger = logging.getLogger(),
     ):
@@ -101,6 +99,7 @@ class BluettiSelect(CoordinatorEntity, SelectEntity):
         self._response_key = field.name
         self._unavailable_counter = 5
         self._lock = lock
+        self._use_encryption = use_encryption
         self._attr_options = [e.name for e in field.e]
 
         self._attr_has_entity_name = True
@@ -205,7 +204,12 @@ class BluettiSelect(CoordinatorEntity, SelectEntity):
             if not client.is_connected:
                 return
 
-            writer = DeviceWriter(client, self._bluetti_device, lock=self._lock)
+            writer_config = DeviceWriterConfig(
+                timeout=15, use_encryption=self._use_encryption
+            )
+            writer = DeviceWriter(
+                client, self._bluetti_device, config=writer_config, lock=self._lock
+            )
 
             async with async_timeout.timeout(15):
                 # Send command

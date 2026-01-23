@@ -20,6 +20,7 @@ from bluetti_bt_lib import (
     build_device,
     BluettiDevice,
     DeviceWriter,
+    DeviceWriterConfig,
     DeviceField,
     FieldName,
 )
@@ -43,10 +44,6 @@ async def async_setup_entry(
     logger = logging.getLogger(
         f"{__name__}.{mac_loggable(config.address).replace(':', '_')}"
     )
-
-    if config.use_encryption is True:
-        logger.info("Controls are disabled on encrypted devices")
-        return None
 
     if config is None or not isinstance(coordinator, PollingCoordinator):
         logger.error("No coordinator found")
@@ -72,6 +69,7 @@ async def async_setup_entry(
                 device_info,
                 field,
                 lock,
+                use_encryption=config.use_encryption,
                 category=category,
                 logger=logger,
             )
@@ -91,6 +89,7 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         device_info: DeviceInfo,
         field: DeviceField,
         lock: asyncio.Lock,
+        use_encryption: bool = False,
         category: EntityCategory | None = None,
         logger: logging.Logger = logging.getLogger(),
     ):
@@ -106,6 +105,7 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         self._response_key = field.name
         self._unavailable_counter = 5
         self._lock = lock
+        self._use_encryption = use_encryption
 
         self._attr_has_entity_name = True
         self._attr_device_info = device_info
@@ -213,7 +213,12 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
             if not client.is_connected:
                 return
 
-            writer = DeviceWriter(client, self._bluetti_device, lock=self._lock)
+            writer_config = DeviceWriterConfig(
+                timeout=15, use_encryption=self._use_encryption
+            )
+            writer = DeviceWriter(
+                client, self._bluetti_device, config=writer_config, lock=self._lock
+            )
 
             async with async_timeout.timeout(15):
                 # Send command
