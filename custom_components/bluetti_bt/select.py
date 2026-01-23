@@ -187,23 +187,25 @@ class BluettiSelect(CoordinatorEntity, SelectEntity):
 
         try:
             writer_config = DeviceWriterConfig(
-                timeout=45, use_encryption=self._use_encryption
+                timeout=10, use_encryption=self._use_encryption
             )
-            # Use new interface: pass MAC address instead of BleakClient
-            # This allows DeviceWriter to handle encryption handshake properly
+            # Reuse coordinator's reader connection and encryption state
+            # This avoids connection conflicts and handshake timeouts
             writer = DeviceWriter(
                 self._address,
                 self._bluetti_device,
                 config=writer_config,
                 lock=self._lock,
                 future_builder_method=self.coordinator.hass.loop.create_future,
+                shared_client=self.coordinator.reader.client,
+                shared_encryption=self.coordinator.reader.encryption,
             )
 
             # Send command
             await writer.write(self._field.name, state)
 
             # Wait until device has changed value, otherwise reading register might reset it
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
         except TimeoutError:
             self._logger.error("Timed out for device %s", mac_loggable(self._address))
