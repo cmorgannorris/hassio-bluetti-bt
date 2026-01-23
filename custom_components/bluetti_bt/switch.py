@@ -231,11 +231,12 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
             # Send command
             await writer.write(self._field.name, state)
 
-            # Wait until device has changed value, otherwise reading register might reset it
-            await asyncio.sleep(2)
+            # Give device time to process the write command
+            await asyncio.sleep(3)
 
         except TimeoutError:
             self._logger.error("Timed out for device %s", mac_loggable(self._address))
             return None
 
-        await self.coordinator.async_request_refresh()
+        # Force immediate refresh to get updated sensor values
+        await self.coordinator.async_refresh()
