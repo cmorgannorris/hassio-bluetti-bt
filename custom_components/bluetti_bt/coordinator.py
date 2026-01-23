@@ -72,4 +72,11 @@ class PollingCoordinator(DataUpdateCoordinator):
             self.last_update_success = False
             return None
 
-        return await self.reader.read()
+        try:
+            data = await self.reader.read()
+            if data is None:
+                self.logger.warning("DeviceReader returned None data")
+            return data
+        except Exception as e:
+            self.logger.error("Error reading from device: %s", e, exc_info=True)
+            raise

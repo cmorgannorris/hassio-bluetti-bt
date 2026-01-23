@@ -17,8 +17,6 @@ CONFIGS = [
     FieldName.CTRL_ECO,
     FieldName.CTRL_ECO_AC,
     FieldName.CTRL_ECO_DC,
-    FieldName.CTRL_ECO_MIN_POWER_AC,
-    FieldName.CTRL_ECO_MIN_POWER_DC,
     FieldName.CTRL_ECO_TIME_MODE,
     FieldName.CTRL_ECO_TIME_MODE_AC,
     FieldName.CTRL_ECO_TIME_MODE_DC,
