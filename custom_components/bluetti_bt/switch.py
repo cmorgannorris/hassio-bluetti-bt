@@ -110,6 +110,7 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_available = False
         self._attr_unique_id = get_unique_id(e_name)
         self._attr_entity_category = category
+        self._write_in_progress = False
 
     @property
     def available(self) -> bool:
@@ -141,6 +142,15 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+
+        # Don't update state from coordinator while write is in progress
+        # This prevents the switch from toggling back to old state while command is being sent
+        if self._write_in_progress:
+            self._logger.debug(
+                "Write in progress for %s, skipping coordinator update",
+                unique_id_logable(self._attr_unique_id)
+            )
+            return
 
         if self.coordinator.data is None:
             self._logger.debug(
@@ -183,6 +193,11 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         self._logger.debug(
             "Turn on %s on %s", self._response_key, mac_loggable(self._address)
         )
+        # Optimistically set state immediately
+        self._attr_is_on = True
+        self._write_in_progress = True
+        self.async_write_ha_state()
+
         await self.write_to_device(True)
 
     async def async_turn_off(self, **kwargs):
@@ -190,6 +205,11 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         self._logger.debug(
             "Turn off %s on %s", self._response_key, mac_loggable(self._address)
         )
+        # Optimistically set state immediately
+        self._attr_is_on = False
+        self._write_in_progress = True
+        self.async_write_ha_state()
+
         await self.write_to_device(False)
 
     async def write_to_device(self, state: bool):
@@ -238,6 +258,11 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         except TimeoutError:
             self._logger.error("Timed out for device %s", mac_loggable(self._address))
             return None
+        finally:
+            # Always clear write lock and allow coordinator updates
+            self._write_in_progress = False
 
         # Force immediate refresh to get updated sensor values
+        # This happens after write completes (or times out)
+        # Coordinator update will now be allowed through
         await self.coordinator.async_refresh()
