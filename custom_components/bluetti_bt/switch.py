@@ -195,19 +195,36 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         """Write to device."""
 
         try:
+            # Check if we can reuse coordinator's connection
+            shared_client = None
+            shared_encryption = None
+
+            if (
+                hasattr(self.coordinator, 'reader') and
+                self.coordinator.reader.client is not None and
+                self.coordinator.reader.encryption is not None and
+                self.coordinator.reader.encryption.is_ready_for_commands
+            ):
+                shared_client = self.coordinator.reader.client
+                shared_encryption = self.coordinator.reader.encryption
+                self._logger.debug("Reusing coordinator's connection")
+                timeout = 10
+            else:
+                self._logger.debug("Coordinator connection not available, creating new connection")
+                timeout = 45
+
             writer_config = DeviceWriterConfig(
-                timeout=10, use_encryption=self._use_encryption
+                timeout=timeout, use_encryption=self._use_encryption
             )
-            # Reuse coordinator's reader connection and encryption state
-            # This avoids connection conflicts and handshake timeouts
+
             writer = DeviceWriter(
                 self._address,
                 self._bluetti_device,
                 config=writer_config,
                 lock=self._lock,
                 future_builder_method=self.coordinator.hass.loop.create_future,
-                shared_client=self.coordinator.reader.client,
-                shared_encryption=self.coordinator.reader.encryption,
+                shared_client=shared_client,
+                shared_encryption=shared_encryption,
             )
 
             # Send command
