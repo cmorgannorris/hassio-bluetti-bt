@@ -3,9 +3,6 @@
 from __future__ import annotations
 import asyncio
 import logging
-import async_timeout
-from bleak import BleakScanner
-from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -189,34 +186,24 @@ class BluettiSelect(CoordinatorEntity, SelectEntity):
         """Write to device."""
 
         try:
-            device = await BleakScanner.find_device_by_address(self._address, timeout=5)
-
-            if device is None:
-                return
-
-            client = await establish_connection(
-                BleakClientWithServiceCache,
-                device,
-                device.name or "Unknown Device",
-                max_attempts=10,
-            )
-
-            if not client.is_connected:
-                return
-
             writer_config = DeviceWriterConfig(
-                timeout=15, use_encryption=self._use_encryption
+                timeout=45, use_encryption=self._use_encryption
             )
+            # Use new interface: pass MAC address instead of BleakClient
+            # This allows DeviceWriter to handle encryption handshake properly
             writer = DeviceWriter(
-                client, self._bluetti_device, config=writer_config, lock=self._lock
+                self._address,
+                self._bluetti_device,
+                config=writer_config,
+                lock=self._lock,
+                future_builder_method=self.coordinator.hass.loop.create_future,
             )
 
-            async with async_timeout.timeout(15):
-                # Send command
-                await writer.write(self._field.name, state)
+            # Send command
+            await writer.write(self._field.name, state)
 
-                # Wait until device has changed value, otherwise reading register might reset it
-                await asyncio.sleep(5)
+            # Wait until device has changed value, otherwise reading register might reset it
+            await asyncio.sleep(5)
 
         except TimeoutError:
             self._logger.error("Timed out for device %s", mac_loggable(self._address))
