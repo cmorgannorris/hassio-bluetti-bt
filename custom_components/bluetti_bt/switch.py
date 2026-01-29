@@ -213,51 +213,83 @@ class BluettiSwitch(CoordinatorEntity, SwitchEntity):
         await self.write_to_device(False)
 
     async def write_to_device(self, state: bool):
-        """Write to device."""
+        """Write to device with retry logic."""
+
+        max_retries = 2
+        retry_count = 0
 
         try:
-            # Check if we can reuse coordinator's connection
-            shared_client = None
-            shared_encryption = None
+            while retry_count <= max_retries:
+                try:
+                    # Check if we can reuse coordinator's connection
+                    # Only try shared connection on first attempt
+                    shared_client = None
+                    shared_encryption = None
 
-            if (
-                hasattr(self.coordinator, 'reader') and
-                self.coordinator.reader.client is not None and
-                self.coordinator.reader.client.is_connected and
-                self.coordinator.reader.encryption is not None and
-                self.coordinator.reader.encryption.is_ready_for_commands
-            ):
-                shared_client = self.coordinator.reader.client
-                shared_encryption = self.coordinator.reader.encryption
-                self._logger.debug("Reusing coordinator's connection")
-                timeout = 10
-            else:
-                self._logger.debug("Coordinator connection not available, creating new connection")
-                timeout = 45
+                    if (
+                        retry_count == 0 and
+                        hasattr(self.coordinator, 'reader') and
+                        self.coordinator.reader.client is not None and
+                        self.coordinator.reader.client.is_connected and
+                        self.coordinator.reader.encryption is not None and
+                        self.coordinator.reader.encryption.is_ready_for_commands
+                    ):
+                        shared_client = self.coordinator.reader.client
+                        shared_encryption = self.coordinator.reader.encryption
+                        self._logger.debug("Reusing coordinator's connection")
+                        timeout = 10
+                    else:
+                        if retry_count > 0:
+                            self._logger.debug("Retry %d: Creating new connection", retry_count)
+                        else:
+                            self._logger.debug("Coordinator connection not available, creating new connection")
+                        timeout = 45
 
-            writer_config = DeviceWriterConfig(
-                timeout=timeout, use_encryption=self._use_encryption
-            )
+                    writer_config = DeviceWriterConfig(
+                        timeout=timeout, use_encryption=self._use_encryption
+                    )
 
-            writer = DeviceWriter(
-                self._address,
-                self._bluetti_device,
-                config=writer_config,
-                lock=self._lock,
-                future_builder_method=self.coordinator.hass.loop.create_future,
-                shared_client=shared_client,
-                shared_encryption=shared_encryption,
-            )
+                    writer = DeviceWriter(
+                        self._address,
+                        self._bluetti_device,
+                        config=writer_config,
+                        lock=self._lock,
+                        future_builder_method=self.coordinator.hass.loop.create_future,
+                        shared_client=shared_client,
+                        shared_encryption=shared_encryption,
+                    )
 
-            # Send command
-            await writer.write(self._field.name, state)
+                    # Send command
+                    await writer.write(self._field.name, state)
 
-            # Give device time to process the write command
-            await asyncio.sleep(3)
+                    # Give device time to process the write command
+                    await asyncio.sleep(3)
 
-        except TimeoutError:
-            self._logger.error("Timed out for device %s", mac_loggable(self._address))
-            return None
+                    # Success - break out of retry loop
+                    break
+
+                except TimeoutError:
+                    retry_count += 1
+                    if retry_count > max_retries:
+                        self._logger.error("Timed out for device %s after %d attempts", mac_loggable(self._address), max_retries + 1)
+                        return None
+                    else:
+                        self._logger.warning("Timeout on attempt %d, retrying...", retry_count)
+                        await asyncio.sleep(2)
+                except Exception as e:
+                    # Catch encryption errors or other failures
+                    if "encryption" in str(e).lower():
+                        retry_count += 1
+                        if retry_count > max_retries:
+                            self._logger.error("Encryption error for device %s after %d attempts: %s", mac_loggable(self._address), max_retries + 1, e)
+                            return None
+                        else:
+                            self._logger.warning("Encryption error on attempt %d, will retry with new connection: %s", retry_count, e)
+                            await asyncio.sleep(2)
+                    else:
+                        # Unexpected error, don't retry
+                        self._logger.error("Unexpected error for device %s: %s", mac_loggable(self._address), e)
+                        return None
         finally:
             # Always clear write lock and allow coordinator updates
             self._write_in_progress = False
